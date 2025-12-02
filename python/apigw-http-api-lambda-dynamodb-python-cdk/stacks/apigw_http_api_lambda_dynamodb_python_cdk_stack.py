@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_apigateway as apigw_,
     aws_ec2 as ec2,
     aws_iam as iam,
+    aws_logs as logs,
     Duration,
 )
 from constructs import Construct
@@ -65,6 +66,14 @@ class ApigwHttpApiLambdaDynamodbPythonCdkStack(Stack):
             partition_key=dynamodb_.Attribute(
                 name="id", type=dynamodb_.AttributeType.STRING
             ),
+            point_in_time_recovery=True,
+        )
+
+        # Create log group for API Gateway access logs
+        api_log_group = logs.LogGroup(
+            self,
+            "ApiGatewayAccessLogs",
+            retention=logs.RetentionDays.ONE_YEAR,
         )
 
         # Create the Lambda function to receive the request
@@ -82,6 +91,7 @@ class ApigwHttpApiLambdaDynamodbPythonCdkStack(Stack):
             memory_size=1024,
             timeout=Duration.minutes(5),
             tracing=lambda_.Tracing.ACTIVE,
+            log_retention=logs.RetentionDays.ONE_YEAR,
         )
 
         # grant permission to lambda to write to demo table
@@ -95,5 +105,17 @@ class ApigwHttpApiLambdaDynamodbPythonCdkStack(Stack):
             handler=api_hanlder,
             deploy_options=apigw_.StageOptions(
                 tracing_enabled=True,
+                access_log_destination=apigw_.LogGroupLogDestination(api_log_group),
+                access_log_format=apigw_.AccessLogFormat.json_with_standard_fields(
+                    caller=True,
+                    http_method=True,
+                    ip=True,
+                    protocol=True,
+                    request_time=True,
+                    resource_path=True,
+                    response_length=True,
+                    status=True,
+                    user=True,
+                ),
             ),
         )
